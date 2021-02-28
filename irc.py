@@ -151,7 +151,7 @@ class IRC:
             f.write(outgoing_notice)
             f.close()
 
-        exclude_nick = "turntechCatnip" # For testing the bot without actually RE-ing people
+        exclude_nick = "" # For testing the bot without actually RE-ing people
         if (requester == exclude_nick):
             self.irc.send(bytes("NOTICE "+ exclude_nick +" !=x \n", "UTF-8"))
         else:
