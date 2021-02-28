@@ -5,13 +5,18 @@ import random
 import ssl
 
 class IRC:
-    def __init__(self, server_hostname):
+    def __init__(self, server_hostname, insecure_mode):
         # Define the socket
         context = ssl.create_default_context()
-
-        context.verify_mode = ssl.CERT_REQUIRED
-        context.check_hostname = True
-        context.load_default_certs()
+        self.insecure_mode = insecure_mode
+        
+        if (self.insecure_mode == True):
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+        else:
+            context.check_hostname = True
+            context.verify_mode = ssl.CERT_REQUIRED
+            context.load_default_certs()
         
         irc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.irc = context.wrap_socket(irc_socket, server_hostname=server_hostname)
@@ -29,19 +34,24 @@ class IRC:
 
         resp = ""
         while(":" + server_hostname +" NOTICE" not in resp):
+            print("Waiting for notice #1")
             resp = str(self.get_response())
             print(resp)
             time.sleep(1)
         resp = ""
-        while(":" + server_hostname + " NOTICE" not in resp):
+        timeout = 0
+        while((":" + server_hostname + " NOTICE" not in resp)&(timeout<4)):
+            print("Waiting for notice #2")
             resp = str(self.get_response())
             print(resp)
+            timeout += 1
             time.sleep(1)
-            
-        cert = self.irc.getpeercert()
-        print(cert)
-        if (ssl.match_hostname(cert, server_hostname) == None):
-            print("Cert (in decoded format as returned by SSLSocket.getpeercert()) matches the given hostname.")
+        print("AAA")
+        if (self.insecure_mode == False):
+            cert = self.irc.getpeercert()
+            print(cert)
+            if (ssl.match_hostname(cert, server_hostname) == None):
+                print("Cert (in decoded format as returned by SSLSocket.getpeercert()) matches the given hostname.")
 
         print(self.get_response())
         

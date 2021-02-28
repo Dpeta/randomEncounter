@@ -3,12 +3,16 @@ import os, sys, time
 import random
 
 ## IRC Config
-server = "192.168.0.17" # The IP/Hostname to connect to.
+server = "192.168.0.15" # The IP/Hostname to connect to.
 server_hostname = "pesterchum.xyz" # The server's hostname.
+#server = "havoc.ddns.net"
+#server_hostname = "irc.havoc.ddns.net"
 port = 6697
 botnick = "randomEncounter"
 logging_enabled = False
 mood_on_join_enabled = False
+insecure_mode = False # For if the hostname can't be verified for SSL/TLS.
+                      # Havoc needs True
 
 ## Irrelevant variables
 bot_hostname = "randomEncounter"
@@ -53,7 +57,7 @@ except:
 print("do_not_random_encounter = " + str(do_not_random_encounter))
 
 ## IRC
-irc = IRC(server_hostname)
+irc = IRC(server_hostname, insecure_mode)
 irc.connect(server, port, botnick, server_hostname, bot_hostname, bot_servername, bot_realname)
 
 while True:
@@ -62,7 +66,7 @@ while True:
             
         if (text!=None):
             print(text)
-            if (("End of /MOTD" in text) & (setup_finished==False)):
+            if ((("End of /MOTD" in text)|("MOTD File is missing" in text)) & (setup_finished==False)):
                 print("End of /MOTD found")
                 if (irc.post_connect_setup(botnick, nickserv_username, nickserv_password)==0):
                     setup_finished = True
