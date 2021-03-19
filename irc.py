@@ -33,10 +33,12 @@ class IRC:
         # For if the connecting is reaaaallly slow, give it a moment to not be dead :)
 
         resp = ""
-        while(":" + server_hostname +" NOTICE" not in resp):
+        timeout = 0
+        while((":" + server_hostname +" NOTICE" not in resp)&(timeout<4)):
             print("Waiting for notice #1")
             resp = str(self.get_response())
             print(resp)
+            timeout += 1
             time.sleep(1)
         resp = ""
         timeout = 0
@@ -46,7 +48,7 @@ class IRC:
             print(resp)
             timeout += 1
             time.sleep(1)
-        print("AAA")
+        #print("AAA")
         if (self.insecure_mode == False):
             cert = self.irc.getpeercert()
             print(cert)

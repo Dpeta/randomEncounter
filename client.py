@@ -4,7 +4,7 @@ import random
 
 ## IRC Config
 server = "192.168.0.17" # The IP/Hostname to connect to.
-server_hostname = "pesterchum.xyz" # The server's hostname.
+server_hostname = "irc.pesterchum.xyz" # The server's hostname.
 #server = "havoc.ddns.net"
 #server_hostname = "irc.havoc.ddns.net"
 port = 6697
