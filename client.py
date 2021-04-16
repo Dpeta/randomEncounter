@@ -3,11 +3,11 @@ import os, sys, time
 import random
 
 ## IRC Config
-server = "192.168.0.17" # The IP/Hostname to connect to.
+server = "127.0.0.1" # The IP/Hostname to connect to.
 server_hostname = "irc.pesterchum.xyz" # The server's hostname.
 #server = "havoc.ddns.net"
 #server_hostname = "irc.havoc.ddns.net"
-port = 6697
+port = 3333
 botnick = "randomEncounter"
 logging_enabled = False
 mood_on_join_enabled = False
