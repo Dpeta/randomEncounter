@@ -62,6 +62,18 @@ irc.connect(server, port, botnick, server_hostname, bot_hostname, bot_servername
 
 while True:
     try:
+        if (int(time.time())%1800) == 0:
+            print("Autosave do_not_random_encounter: " + str(do_not_random_encounter))
+            DN_RE_string = ""
+            for x in range(len(do_not_random_encounter)):
+                DN_RE_string += do_not_random_encounter[x]
+                DN_RE_string += " "
+            DN_RE_string = DN_RE_string.strip()
+            
+            f = open("do_not_random_encounter.txt", "w")
+            f.write(DN_RE_string)
+            f.close()
+        
         text = irc.get_response()
             
         if (text!=None):
