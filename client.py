@@ -92,7 +92,7 @@ while True:
                         # Give mood
                         # Because of the bot's modes, we can't actually check for GETMOOD,
                         # so, I decided to have it respond when people join.
-                        # Of course, setting a mood isn't actually neccisarry for anything,
+                        # Of course, setting a mood isn't actually necessary for anything,
                         # so disabling it might actually be better for people with low bandwith :(
                         if (("JOIN" in textSplit[1])&("#pesterchum" in textSplit[2])):
                             irc.send("PRIVMSG #pesterchum MOOD >7" + "\n")
