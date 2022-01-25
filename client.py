@@ -5,14 +5,13 @@ import random
 ## IRC Config
 server = "127.0.0.1" # The IP/Hostname to connect to.
 server_hostname = "irc.pesterchum.xyz" # The server's hostname.
-#server = "havoc.ddns.net"
-#server_hostname = "irc.havoc.ddns.net"
+#server = "irc.broken-moon.net"
+#server_hostname = "irc.broken-moon.net"
 port = 3333
 botnick = "randomEncounter"
 logging_enabled = False
 mood_on_join_enabled = False
 insecure_mode = False # For if the hostname can't be verified for SSL/TLS.
-                      # Havoc needs True
 
 ## Irrelevant variables
 bot_hostname = "randomEncounter"
