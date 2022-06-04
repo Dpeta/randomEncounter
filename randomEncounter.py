@@ -96,10 +96,17 @@ class randomEncounterBot():
             # PRIVMSG, always respond with random handle
             elif command == "PRIVMSG":
                 receiver = parameters[0]
-                if receiver != "randomEncounter":
-                    return
                 nick = prefix[:prefix.find('!')]
                 msg = parameters[1][1:] # Strip delimiter ':'
+                                        # msg is only the first word
+                # We can give mood :3
+                if receiver == "#pesterchum":
+                    if msg.startswith("GETMOOD") & ("randomEncounter" in parameters[2]):
+                        await self.send("PRIVMSG #pesterchum MOOD >18")
+                # If it's not addressed to us it's irrelevant
+                if receiver != "randomEncounter":
+                    return
+                # Don't wanna lock people into dialogue :"3
                 if msg.startswith("PESTERCHUM") or msg.startswith("COLOR"):
                     return
                 await self.userlistUpdate()
