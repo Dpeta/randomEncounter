@@ -42,6 +42,7 @@ class randomEncounterBot():
                                 'vhost_password': ''}
             with open('config.ini', 'w') as configfile:
                 config.write(configfile)
+            print("Wrote default config file.")
         return config
  
     async def connect(self):
@@ -89,17 +90,30 @@ class randomEncounterBot():
             # RPL_ENDOFWHO, WHO finished
             elif command == "315":
                 self.updatingUserlist = False
-            # RPL_WHOREPLY, add WHO replies to userlist
+            # RPL_WHOREPLY, add WHO reply to userlist
             elif command == "352":
                 channel, user, host, server, nick = parameters[1:6]
                 self.userlist.append(nick)
+            # RPL_NAMREPLY, add NAMES reply to userlist
+            elif command == "353":
+                names_str = text.split(':')[2]    # List of names start after second delimiter
+                names_list = names_str.split(' ') # 0x20 is the seperator between nicks
+                # Strip channel operator symbols
+                for x in names_list:
+                    if (x[0] == '@') or (x[0] == '+'):
+                        x = x[1:]
+                # Add to userlist
+                for x in names_list:
+                    self.userlist.append(x)
+            # RPL_ENDOFNAMES, NAMES finished
+            elif command == "366":
+                self.updatingUserlist = False
             # PRIVMSG, always respond with random handle
             elif command == "PRIVMSG":
                 receiver = parameters[0]
                 nick = prefix[:prefix.find('!')]
                 msg = text[text.find(parameters[1][1:]):] # All remaining parameters as str
                                                           # Delimiter ':' is stripped
-                print(msg)
                 # We can give mood :3
                 if receiver == "#pesterchum":
                     if msg.startswith("GETMOOD") & ("randomEncounter" in msg):
@@ -237,7 +251,7 @@ class randomEncounterBot():
             self.updatingUserlist = True
             self.userlistDate = time.time()
             self.userlist = []
-            await self.send("WHO 0")
+            await self.send("NAMES #pesterchum")
             # Wait for update to finish
         # Block until finished
         while self.updatingUserlist == True:
