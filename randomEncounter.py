@@ -98,13 +98,13 @@ class randomEncounterBot():
             elif command == "353":
                 names_str = text.split(':')[2]    # List of names start after second delimiter
                 names_list = names_str.split(' ') # 0x20 is the seperator between nicks
-                # Strip channel operator symbols
-                for x in names_list:
-                    if (x[0] == '@') or (x[0] == '+'):
-                        x = x[1:]
                 # Add to userlist
                 for x in names_list:
-                    self.userlist.append(x)
+                    # Strip channel operator symbols
+                    if (x[0] == '@') or (x[0] == '+'):
+                        self.userlist.append(x[1:])
+                    else:
+                        self.userlist.append(x)
             # RPL_ENDOFNAMES, NAMES finished
             elif command == "366":
                 self.updatingUserlist = False
