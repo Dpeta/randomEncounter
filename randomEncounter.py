@@ -97,11 +97,12 @@ class randomEncounterBot():
             elif command == "PRIVMSG":
                 receiver = parameters[0]
                 nick = prefix[:prefix.find('!')]
-                msg = parameters[1][1:] # Strip delimiter ':'
-                                        # msg is only the first word
+                msg = text[text.find(parameters[1][1:]):] # All remaining parameters as str
+                                                          # Delimiter ':' is stripped
+                print(msg)
                 # We can give mood :3
                 if receiver == "#pesterchum":
-                    if msg.startswith("GETMOOD") & ("randomEncounter" in parameters[2]):
+                    if msg.startswith("GETMOOD") & ("randomEncounter" in msg):
                         await self.send("PRIVMSG #pesterchum MOOD >18")
                 # If it's not addressed to us it's irrelevant
                 if receiver != "randomEncounter":
@@ -180,12 +181,11 @@ class randomEncounterBot():
             # NOTICE
             elif command == "NOTICE":
                 receiver = parameters[0]
-                print(receiver)
                 if receiver != "randomEncounter":
                     return
                 nick = prefix[:prefix.find('!')]
-                msg = parameters[1][1:] # Strip delimiter ':'
-                print(msg)
+                msg = text[text.find(parameters[1][1:]):] # All remaining parameters as str
+                                                          # Delimiter ':' is stripped
                 # Return random user
                 if msg.startswith("!"):
                     await self.userlistUpdate()
@@ -202,7 +202,6 @@ class randomEncounterBot():
                         await self.userlistUpdate()
                 # Disable random encounters
                 elif msg.startswith("-"):
-                    raise Exception
                     await self.send("NOTICE",
                                     nick,
                                     "-=k")
