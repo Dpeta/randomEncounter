@@ -1,6 +1,7 @@
 # Bot
 password.txt
 do_not_random_encounter.txt
+config.ini
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
