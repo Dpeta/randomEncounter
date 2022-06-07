@@ -267,6 +267,8 @@ class randomEncounterBot():
         for x in self.userlistIdle:
             if x in self.userlistEncounterable:
                 self.userlistEncounterable.remove(x)
+        print("USERS TOTAL: " + str(len(self.userlist)))
+        print("USERS VIABLE: " + str(len(self.userlistEncounterable)))
             
     async def main(self):
         while True:
