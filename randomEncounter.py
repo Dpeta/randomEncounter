@@ -71,6 +71,7 @@ class randomEncounterBot():
         await self.send("PRIVMSG nickserv identify",
                         config['tokens']['nickserv_username'],
                         config['tokens']['nickserv_password'])
+        await self.send("METADATA * set mood 18")
 
     async def respond(self, data):
         text = data.decode()
