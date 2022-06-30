@@ -128,6 +128,7 @@ class randomEncounterBot():
                 await self.userlistUpdate()
                 if msg.startswith('\x01') == False:
                     # Normal PRIVMSG
+                    await self.userlistUpdate()
                     outnick = random.choice(self.userlistEncounterable)
                     outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
                     await self.send("PRIVMSG", nick, outnick)
@@ -136,9 +137,9 @@ class randomEncounterBot():
                     msg = msg.strip('\x01') # Strip so we can reuse notice code
                     # Return random user
                     if msg.startswith("!"):
+                        await self.userlistUpdate()
                         outnick = random.choice(self.userlistEncounterable)
                         outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
-                        await self.userlistUpdate()
                         await self.send("NOTICE",
                                         nick,
                                         '\x01' + "!=" + outnick + '\x01')
@@ -207,9 +208,9 @@ class randomEncounterBot():
                                                           # Delimiter ':' is stripped
                 # Return random user
                 if msg.startswith("!"):
+                    await self.userlistUpdate()
                     outnick = random.choice(self.userlistEncounterable)
                     outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
-                    await self.userlistUpdate()
                     await self.send("NOTICE",
                                     nick,
                                     "!=" + outnick)
