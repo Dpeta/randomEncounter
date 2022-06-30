@@ -128,16 +128,20 @@ class randomEncounterBot():
                 await self.userlistUpdate()
                 if msg.startswith('\x01') == False:
                     # Normal PRIVMSG
-                    await self.send("PRIVMSG", nick, random.choice(self.userlistEncounterable))
+                    outnick = random.choice(self.userlistEncounterable)
+                    outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
+                    await self.send("PRIVMSG", nick, outnick)
                 elif msg.startswith('\x01'):
                     # CTCP
                     msg = msg.strip('\x01') # Strip so we can reuse notice code
                     # Return random user
                     if msg.startswith("!"):
+                        outnick = random.choice(self.userlistEncounterable)
+                        outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
                         await self.userlistUpdate()
                         await self.send("NOTICE",
                                         nick,
-                                        '\x01' + "!=" + random.choice(self.userlistEncounterable) + '\x01')
+                                        '\x01' + "!=" + outnick + '\x01')
                     # Enable random encounters
                     elif msg.startswith("+"):
                         await self.send("NOTICE",
@@ -203,10 +207,12 @@ class randomEncounterBot():
                                                           # Delimiter ':' is stripped
                 # Return random user
                 if msg.startswith("!"):
+                    outnick = random.choice(self.userlistEncounterable)
+                    outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
                     await self.userlistUpdate()
                     await self.send("NOTICE",
                                     nick,
-                                    "!=" + random.choice(self.userlistEncounterable))
+                                    "!=" + outnick)
                 # Enable random encounters
                 elif msg.startswith("+"):
                     await self.send("NOTICE",
