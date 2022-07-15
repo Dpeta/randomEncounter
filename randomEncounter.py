@@ -1,13 +1,25 @@
 #! /usr/bin/env python3
 # randomEnounter bot for Pesterchum using asyncio
-import asyncio
-import random
-import time
-import configparser
 import os
+import sys
+import time
+import random
+import logging
+import asyncio
+import traceback
+import configparser
 
-class randomEncounterBot():
+source = "https://github.com/Dpeta/randomEncounter"
+version = "randomEncounter"
+clientinfo = "CLIENTINFO ! - + * ~ VERSION SOURCE PING CLIENTINFO"
+channel_membership_prefixes = ['~', '&', '@', '%', '+']
+
+if not os.path.isdir('errorlogs'):
+    os.makedirs('errorlogs')
+
+class randomEncounterBot:
     def __init__(self):
+        self.end = False
         self.reader = None
         self.writer = None
         self.userlist = []
@@ -39,7 +51,8 @@ class randomEncounterBot():
             config['tokens'] = {'nickserv_username': '',
                                 'nickserv_password': '',
                                 'vhost_login': '',
-                                'vhost_password': ''}
+                                'vhost_password': '',
+                                'quit_secret_command': ''}
             with open('config.ini', 'w') as configfile:
                 config.write(configfile)
             print("Wrote default config file.")
@@ -72,7 +85,25 @@ class randomEncounterBot():
                         config['tokens']['nickserv_username'],
                         config['tokens']['nickserv_password'])
         await self.send("METADATA * set mood 18")
-
+        
+    async def safeRespond(self, data):
+        # Catch and log exception
+        try:
+            await self.respond(data)
+        except Exception as e:
+            print("Error, %s" % e)
+            # Try to write to logfile
+            try:
+                lt = time.localtime()
+                lt_str = time.strftime("%Y-%m-%d %H-%M", lt)
+                f = open(os.path.join('errorlogs',
+                                      ('RE_errorlog %s.log'
+                                       % lt_str)), 'a')
+                traceback.print_tb(e.__traceback__, file=f)
+                f.close()
+            except Exception as e:
+                print(e)
+        
     async def respond(self, data):
         text = data.decode()
         if text.startswith("PING"):
@@ -97,8 +128,10 @@ class randomEncounterBot():
                 self.userlist.append(nick)
             # RPL_NAMREPLY, add NAMES reply to userlist
             elif command == "353":
-                names_str = text.split(':')[2]    # List of names start after second delimiter
-                names_list = names_str.split(' ') # 0x20 is the seperator between nicks
+                names_str = text.split(':')[2]  # List of names start
+                                                # after second delimiter
+                names_list = names_str.split(' ')  # 0x20 is the seperator
+                                                   # between nicks
                 # Add to userlist
                 for x in names_list:
                     # Strip channel operator symbols
@@ -109,7 +142,7 @@ class randomEncounterBot():
             # RPL_ENDOFNAMES, NAMES finished
             elif command == "366":
                 self.updatingUserlist = False
-            # PRIVMSG, always respond with random handle
+            # PRIVMSG, reply with random handle unless quit
             elif command == "PRIVMSG":
                 receiver = parameters[0]
                 nick = prefix[:prefix.find('!')]
@@ -127,11 +160,29 @@ class randomEncounterBot():
                     return
                 await self.userlistUpdate()
                 if msg.startswith('\x01') == False:
-                    # Normal PRIVMSG
-                    await self.userlistUpdate()
-                    outnick = random.choice(self.userlistEncounterable)
-                    outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
-                    await self.send("PRIVMSG", nick, outnick)
+                    if msg.lower().startswith('die '):
+                        # Quit command
+                        config = await self.getConfig()
+                        if ((msg[4:].strip() == config['tokens']['quit_secret_command'])
+                            and (msg[4:].strip() != '')):
+                            # someone send the scrunkleword :'3
+                            self.end = True
+                            await self.send("QUIT goo by cwuel wowl,,")
+                    elif msg.lower().startswith('restart '):
+                        # Restart command
+                        config = await self.getConfig()
+                        if ((msg[8:].strip() == config['tokens']['quit_secret_command'])
+                            and (msg[8:].strip() != '')):
+                            # someone send the scrunkleword :'3
+                            await self.send("QUIT goo by cwuel wowl,,")
+                    else:
+                        # Normal PRIVMSG
+                        await self.userlistUpdate()
+                        outnick = random.choice(self.userlistEncounterable)
+                        for char in channel_membership_prefixes:
+                            if outnick[0] == char:
+                                outnick = outnick[1:]
+                        await self.send("PRIVMSG", nick, outnick)
                 elif msg.startswith('\x01'):
                     # CTCP
                     msg = msg.strip('\x01') # Strip so we can reuse notice code
@@ -139,7 +190,9 @@ class randomEncounterBot():
                     if msg.startswith("!"):
                         await self.userlistUpdate()
                         outnick = random.choice(self.userlistEncounterable)
-                        outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
+                        for char in channel_membership_prefixes:
+                            if outnick[0] == char:
+                                outnick = outnick[1:]
                         await self.send("NOTICE",
                                         nick,
                                         '\x01' + "!=" + outnick + '\x01')
@@ -184,11 +237,17 @@ class randomEncounterBot():
                     elif msg.startswith("VERSION"):
                         await self.send("NOTICE",
                                         nick,
-                                        '\x01' + "VERSION randomEncounter" + '\x01')
+                                        '\x01'
+                                        + "VERSION "
+                                        + version
+                                        + '\x01')
                     elif msg.startswith("SOURCE"):
                         await self.send("NOTICE",
                                         nick,
-                                        '\x01' + "SOURCE https://github.com/Dpeta/randomEncounter" + '\x01')
+                                        '\x01'
+                                        + "SOURCE "
+                                        + source
+                                        + '\x01')
                     elif msg.startswith("PING"):
                         await self.send("NOTICE",
                                         nick,
@@ -196,7 +255,9 @@ class randomEncounterBot():
                     elif msg.startswith("CLIENTINFO"):
                         await self.send("NOTICE",
                                         nick,
-                                        '\x01' + "CLIENTINFO ! - + * ~ VERSION SOURCE PING CLIENTINFO" + '\x01')
+                                        '\x01'
+                                        + clientinfo
+                                        + '\x01')
                         
             # NOTICE
             elif command == "NOTICE":
@@ -210,7 +271,9 @@ class randomEncounterBot():
                 if msg.startswith("!"):
                     await self.userlistUpdate()
                     outnick = random.choice(self.userlistEncounterable)
-                    outnick = outnick.strip('~').strip('@').strip('+').strip('&').strip('%')
+                    for char in channel_membership_prefixes:
+                        if outnick[0] == char:
+                            outnick = outnick[1:]
                     await self.send("NOTICE",
                                     nick,
                                     "!=" + outnick)
@@ -278,21 +341,28 @@ class randomEncounterBot():
         print("USERS VIABLE: " + str(len(self.userlistEncounterable)))
             
     async def main(self):
-        while True:
-            await asyncio.create_task(self.connect())
-            while self.writer.is_closing() == False:
-                try:
-                    data = await self.reader.readline()
-                    if data != None:
-                        asyncio.create_task(self.respond(data))
-                except:
+        while self.end == False:
+            # Try to connect
+            try:
+                await self.connect()
+            except Exception as e:
+                print("Failed to connect, %s" % e)
+            # Sub event loop while connected
+            if None not in [self.writer, self.reader]:
+                while (self.writer.is_closing() == False) and (self.reader.at_eof() == False):
                     try:
-                        await self.send("QUIT goo by cwuel wowl,,")
+                        data = await self.reader.readline()
+                        if data != None:
+                            asyncio.create_task(self.safeRespond(data))
                     except:
-                        pass
-                    self.writer.close()
-            print("4.13 seconds until reconnect. . .")
-            await asyncio.sleep(4.13)
+                        try:
+                            await self.send("QUIT goo by cwuel wowl,,")
+                        except:
+                            pass
+                        self.writer.close()
+            if self.end == False:
+                print("4.13 seconds until reconnect. . .")
+                await asyncio.sleep(4.13)
 
 if __name__ == "__main__":
     bot = randomEncounterBot()
