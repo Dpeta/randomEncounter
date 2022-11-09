@@ -98,7 +98,7 @@ class RandomEncounterBot:
         )
         # Set mood/color
         await self.send("METADATA * set mood 18")  #  'PROTECTIVE' mood
-        await self.send("METADATA * set color 255,0,0")  # Red
+        await self.send("METADATA * set color #ff0000")  # Red
 
     async def safe_respond(self, data):
         """Alternative way to call respond(), catches and logs exception."""
