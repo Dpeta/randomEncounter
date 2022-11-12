@@ -1,6 +1,8 @@
 # Pesterchum Random Encounters Bot
 Random encounters for Pesterchum, now with asyncio :3c
 
+Requires at least Python ``3.10``.
+
 The Pesterchum client can only do random encounters if this bot or an equivalent bot is present on the connected IRC server.
 
 Run with ``python3 randomEncounter.py`` or simply ``./randomEncounter``.

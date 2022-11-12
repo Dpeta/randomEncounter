@@ -11,11 +11,92 @@ import configparser
 
 SOURCE = "https://github.com/Dpeta/randomEncounter"
 VERSION = "randomEncounter"
-CLIENTINFO = "CLIENTINFO ! - + * ~ VERSION SOURCE PING CLIENTINFO"
+CLIENTINFO = "VERSION SOURCE PING CLIENTINFO"
 PREFIXES = ["~", "&", "@", "%", "+"]  # channel membership prefixes
+ACCEPTABLE_EXCEPTIONS = (OSError, TimeoutError, EOFError, asyncio.LimitOverrunError)
 
 if not os.path.isdir("errorlogs"):
     os.makedirs("errorlogs")
+
+
+class Users:
+    """Class to keep track of users and their states"""
+
+    def __init__(self):
+        self.userlist = []
+        self.exclude = []  # Users with RE turned off
+        self.idle = []  # Idle users
+
+    async def add(self, *users):
+        """Adds users if they joined or someone changed their nick to a new handle"""
+        for user in users:
+            if user[0] in PREFIXES:
+                user = user[1:]
+            if user not in self.userlist:
+                self.userlist.append(user)
+        print(f"self.userlist: {self.userlist}")
+
+    async def remove(self, *users):
+        """Adds users if they quit/parted or someone changed their nick to a new handle"""
+        for user in users:
+            if user[0] in PREFIXES:
+                user = user[1:]
+            if user in self.userlist:
+                self.userlist.remove(user)
+        print(f"self.userlist: {self.userlist}")
+
+    async def set_idle(self, user, idle):
+        """Set if a user is or is not idle,
+        params are user (str) and idle state (bool)"""
+        if idle:
+            if user not in self.idle:
+                # Add idle user
+                self.idle.append(user)
+        else:
+            if user in self.idle:
+                # Remove idle user
+                self.idle.remove(user)
+        print(f"self.idle: {self.idle}")
+
+    async def set_random_encounter(self, user, encounter):
+        """Set if a user has random encounters enabled,
+        params are user (str) and encounter state (bool)"""
+        if encounter:
+            if user in self.exclude:
+                # Remove user from exclude list
+                self.exclude.remove(user)
+        else:
+            if user not in self.exclude:
+                # Add user to exclude list
+                self.exclude.append(user)
+        print(f"self.exclude: {self.exclude}")
+
+    async def get_random(self):
+        """Return a random user from the userlist,
+        exclude idlers and users with RE disabled."""
+        # Encouterable users
+        encounter = self.userlist.copy()
+        dont_encounter = self.exclude + self.idle
+        # Exclude idle users and users with RE turned off
+        for user in dont_encounter:
+            if user in encounter:
+                encounter.remove(user)
+        print(f"dont_encounter: {dont_encounter}")
+        print(f"encounter: {encounter}")
+        return random.choice(encounter)
+
+    async def sanity_check(self):
+        """Make sure that users not in the userlist aren't
+        still listed in the idle/exclude lists."""
+        try:
+            for user in self.exclude.copy():
+                if user not in self.userlist:
+                    self.exclude.remove(user)
+            for user in self.idle.copy():
+                if user not in self.userlist:
+                    self.idle.remove(user)
+        except ValueError as oh_no:
+            print(oh_no)
 
 
 class RandomEncounterBot:
@@ -25,12 +106,8 @@ class RandomEncounterBot:
         self.end = False
         self.reader = None
         self.writer = None
-        self.userlist = []
-        self.userlist_exclude = []
-        self.userlist_idle = []
-        self.userlist_encounterable = []
-        self.updating_userlist = False
-        self.userlist_date = 0
+        self.users = Users()
+        self.names = []  # For updating userlist via NAMES
 
     async def send(self, text, *params):
         """Works with command as str or as multiple seperate params"""
@@ -82,7 +159,7 @@ class RandomEncounterBot:
         await self.send("NICK randomEncounter")
         await self.send("USER RE 0 * :PCRC")
 
-    async def welcome(self):
+    async def welcome(self, _):
         """Actions to take when the server has send a welcome/001 reply,
         meaning the client is connected and nick/user registration is completed."""
         config = await self.get_config()
@@ -100,186 +177,216 @@ class RandomEncounterBot:
         await self.send("METADATA * set mood 18")  #  'PROTECTIVE' mood
         await self.send("METADATA * set color #ff0000")  # Red
 
-    async def safe_respond(self, data):
-        """Alternative way to call respond(), catches and logs exception."""
-        try:
-            await self.respond(data)
-        except Exception as respond_except:
-            print("Error,", respond_except)
-            # Try to write to logfile
-            try:
-                local_time = time.localtime()
-                local_time_str = time.strftime("%Y-%m-%d %H-%M", local_time)
-                with open(
-                    os.path.join("errorlogs", f"RE_errorlog {local_time_str}.log"),
-                    "a",
-                    encoding="utf-8",
-                ) as file:
-                    traceback.print_tb(respond_except.__traceback__, file=file)
-                    file.close()
-            except Exception as write_except:
-                print("Failed to write errorlog,", write_except)
+    async def nam_reply(self, text):
+        """RPL_NAMREPLY, add NAMES reply to userlist"""
+        text = text.strip()
+        # List of names start
+        names_str = text.split(":")[2]
+        # after second delimiter
+        names_list = names_str.split(" ")  # 0x20 is the seperator
+        # Add to userlist
+        for name in names_list:
+            # Strip channel operator symbols
+            if (name[0] == "@") or (name[0] == "+"):
+                self.names.append(name[1:])
+            else:
+                self.names.append(name)
 
-    async def respond(self, data):
-        """Responses for server reply code / commands."""
-        text = data.decode()
-        if text.startswith("PING"):
-            self.writer.write(text.replace("PING", "PONG").encode())
+    async def end_of_names(self, _):
+        """RPL_ENDOFNAMES, NAMES finished"""
+        print(f"{self.users.userlist} replaced with {self.names}")
+        self.users.userlist = self.names
+        self.names = []
+        await self.users.sanity_check()
+
+    async def privmsg(self, text):
+        """Handles incoming PRIVMSG"""
+        text = text.strip()
+        parameters = text.split(" ")[2:15]
+        receiver = parameters[0]
+        prefix = text[1:].split(" ")[0]
+        nick = prefix[: prefix.find("!")]
+
+        # All remaining parameters as str, the delimiter ':' is stripped.
+        msg = text[text.find(parameters[1][1:]) :]
+
+        # We can give mood :3
+        if receiver == "#pesterchum":
+            if "randomEncounter" in msg and msg.startswith("GETMOOD"):
+                await self.send("PRIVMSG #pesterchum MOOD >18")
+
+        # Return if not addressed to us or if it's just Pesterchum syntax weirdness.
+        if (
+            receiver != "randomEncounter"
+            or msg.startswith("PESTERCHUM")
+            or msg.startswith("COLOR")
+        ):
             return
-        if text.startswith(":") & (len(text.split(" ")) > 2):
-            prefix = text[1:].split(" ")[0]
-            command = text.split(" ")[1]
-            parameters = text.split(" ")[2:15]
-            print(prefix, command, parameters)
-            # RPL_WELCOME, run actions on welcome
-            if command == "001":
-                await self.welcome()
-            # RPL_ENDOFWHO, WHO finished
-            elif command == "315":
-                self.updating_userlist = False
-            # RPL_WHOREPLY, add WHO reply to userlist
-            elif command == "352":
-                # channel, user, host, server, nick = parameters[1:6]
-                nick = parameters[5]
-                self.userlist.append(nick)
-            # RPL_NAMREPLY, add NAMES reply to userlist
-            elif command == "353":
-                names_str = text.split(":")[2]  # List of names start
-                # after second delimiter
-                names_list = names_str.split(" ")  # 0x20 is the seperator
-                # between nicks
-                # Add to userlist
-                for name in names_list:
-                    # Strip channel operator symbols
-                    if (name[0] == "@") or (name[0] == "+"):
-                        self.userlist.append(name[1:])
-                    else:
-                        self.userlist.append(name)
-            # RPL_ENDOFNAMES, NAMES finished
-            elif command == "366":
-                self.updating_userlist = False
-            # PRIVMSG, reply with random handle unless quit
-            elif command == "PRIVMSG":
-                receiver = parameters[0]
-                nick = prefix[: prefix.find("!")]
-                msg = text[
-                    text.find(parameters[1][1:]) :
-                ]  # All remaining parameters as str
-                # Delimiter ':' is stripped
-                # We can give mood :3
-                if receiver == "#pesterchum":
-                    if msg.startswith("GETMOOD") & ("randomEncounter" in msg):
-                        await self.send("PRIVMSG #pesterchum MOOD >18")
-                # If it's not addressed to us it's irrelevant
-                if receiver != "randomEncounter":
-                    return
-                # Don't wanna lock people into dialogue :"3
-                if msg.startswith("PESTERCHUM") or msg.startswith("COLOR"):
-                    return
-                await self.userlist_update()
 
-                # Handle possible commands
-                # Any PRIVMSG
-                await self.userlist_update()
-                outnick = random.choice(self.userlist_encounterable)
-                for char in PREFIXES:
-                    if outnick[0] == char:
-                        outnick = outnick[1:]
-                await self.send("PRIVMSG", nick, outnick)
+        if msg[0] != "\x01":
+            # Reply with a random user
+            outnick = await self.users.get_random()
+            await self.send("PRIVMSG", nick, outnick)
+        else:
+            # CTCP
+            msg = msg.strip("\x01")
+            match msg:
+                case "VERSION":
+                    await self.send(f"NOTICE {nick} \x01VERSION {VERSION}\x01")
+                case "SOURCE":
+                    await self.send(f"NOTICE {nick} \x01SOURCE {SOURCE}\x01")
+                case "PING":
+                    await self.send(f"NOTICE {nick} \x01{msg}\x01")
+                case "CLIENTINFO":
+                    await self.send(f"NOTICE {nick} \x01CLIENTINFO {CLIENTINFO}\x01")
 
-            # NOTICE
-            elif command == "NOTICE":
-                receiver = parameters[0]
-                if receiver != "randomEncounter":
-                    return
-                nick = prefix[: prefix.find("!")]
-                msg = text[
-                    text.find(parameters[1][1:]) :
-                ]  # All remaining parameters as str
-                # Delimiter ':' is stripped
-                # Return random user
-                if msg.startswith("!"):
-                    await self.userlist_update()
-                    outnick = random.choice(self.userlist_encounterable)
-                    for char in PREFIXES:
-                        if outnick[0] == char:
-                            outnick = outnick[1:]
-                    await self.send("NOTICE", nick, "!=" + outnick)
-                # Enable random encounters
-                elif msg.startswith("+"):
-                    await self.send("NOTICE", nick, "+=k")
-                    if nick in self.userlist_exclude:
-                        self.userlist_exclude.remove(nick)
-                        await self.userlist_update()
-                # Disable random encounters
-                elif msg.startswith("-"):
-                    await self.send("NOTICE", nick, "-=k")
-                    if nick not in self.userlist_exclude:
-                        self.userlist_exclude.append(nick)
-                        await self.userlist_update()
-                # Become idle
-                elif msg.startswith("~"):
-                    await self.send("NOTICE", nick, "~=k")
-                    if nick not in self.userlist_idle:
-                        self.userlist_idle.append(nick)
-                        await self.userlist_update()
-                # Stop being idle
-                elif msg.startswith("*"):
-                    await self.send("NOTICE", nick, "*=k")
-                    if nick in self.userlist_idle:
-                        self.userlist_idle.remove(nick)
-                        await self.userlist_update()
-                # ???
-                elif msg.startswith("?"):
-                    await self.send("NOTICE", nick, "?=y")
+    async def notice(self, text):
+        """Handles incoming NOTICE"""
+        text = text.strip()
+        parameters = text.split(" ")[2:15]
+        receiver = parameters[0]
+        prefix = text[1:].split(" ")[0]
+        nick = prefix[: prefix.find("!")]
 
-    async def userlist_update(self):
-        """Updates userlist by requesting #pesterchum userlist"""
-        # Only update userlist if old
-        if time.time() - self.userlist_date > 14.13:
-            print("updating userlist. . .")
-            self.updating_userlist = True
-            self.userlist_date = time.time()
-            self.userlist = []
-            await self.send("NAMES #pesterchum")
-            # Wait for update to finish
-        # Block until finished
-        while self.updating_userlist:
-            await asyncio.sleep(0.413)
-        # Encouterable users
-        self.userlist_encounterable = self.userlist.copy()
-        # Exclude users with RE turned off
-        for dont_encounter in self.userlist_exclude:
-            if dont_encounter in self.userlist_encounterable:
-                self.userlist_encounterable.remove(dont_encounter)
-        # Exclude idle users
-        for idle_user in self.userlist_idle:
-            if idle_user in self.userlist_encounterable:
-                self.userlist_encounterable.remove(idle_user)
-        print(f"USERS TOTAL: {len(self.userlist)}")
-        print(f"USERS VIABLE: {len(self.userlist_encounterable)}")
+        if receiver != "randomEncounter":
+            return
+
+        # All remaining parameters as str, the delimiter ':' is stripped.
+        msg = text[text.find(parameters[1][1:]) :]
+
+        match msg[0]:
+            # Return random user
+            case "!":
+                outnick = await self.users.get_random()
+                await self.send("NOTICE", nick, "!=" + outnick)
+            # Enable random encounters
+            case "+":
+                await self.send("NOTICE", nick, "+=k")
+                await self.users.set_random_encounter(nick, True)
+            # Disable random encounters
+            case "-":
+                await self.send("NOTICE", nick, "-=k")
+                await self.users.set_random_encounter(nick, False)
+            # Become idle
+            case "~":
+                await self.send("NOTICE", nick, "~=k")
+                await self.users.set_idle(nick, True)
+            # Stop being idle
+            case "*":
+                await self.send("NOTICE", nick, "*=k")
+                await self.users.set_idle(nick, False)
+            # ???
+            case "?":
+                await self.send("NOTICE", nick, "?=y")
+
+    async def ping(self, text):
+        """Handle incoming pings"""
+        self.writer.write(text.replace("PING", "PONG").encode())
+
+    async def nick(self, text):
+        """Handle users changing their nicks,
+        nick got changed from old_nick to new_nick"""
+        text = text.strip()
+        prefix = text[1:].split(" ")[0]
+        old_nick = prefix[: prefix.find("!")]
+        parameters = text.split(" ")[2:15]
+        new_nick = parameters[0]
+        if new_nick[0] == ":":
+            new_nick = new_nick[1:]
+
+        await self.users.set_idle(prefix, False)
+        await self.users.set_random_encounter(prefix, False)
+        await self.users.remove(old_nick)
+        await self.users.add(new_nick)
+
+    async def quit(self, text):
+        """Handle other user's QUITs"""
+        text = text.strip()
+        prefix = text[1:].split(" ")[0]
+        nick = prefix[: prefix.find("!")]
+        await self.users.remove(nick)
+
+    async def part(self, text):
+        """Handle other user's PARTs"""
+        text = text.strip()
+        prefix = text[1:].split(" ")[0]
+        nick = prefix[: prefix.find("!")]
+        await self.users.remove(nick)
+
+    async def join(self, text):
+        """Handle other user's JOINs"""
+        text = text.strip()
+        prefix = text[1:].split(" ")[0]
+        nick = prefix[: prefix.find("!")]
+        if nick[0] == ":":
+            nick = nick[1:]
+        await self.users.add(nick)
+
+    async def get_names(self):
+        """Routinely retrieve the userlist from scratch."""
+        while True:
+            await asyncio.sleep(1800)  # 30min
+            print("Routine NAMES send.")
+            try:
+                await self.send("NAMES #pesterchum")
+            except AttributeError as fail_names:
+                print(f"Failed to send NAMES, disconnected? {fail_names}")
 
     async def main(self):
         """Main function/loop, creates a new task when the server sends data."""
+        command_handlers = {
+            "001": self.welcome,
+            "353": self.nam_reply,
+            "366": self.end_of_names,
+            "PING": self.ping,
+            "PRIVMSG": self.privmsg,
+            "NOTICE": self.notice,
+            "NICK": self.nick,
+            "QUIT": self.quit,
+            "PART": self.part,
+            "JOIN": self.join,
+        }
+        # Create task for routinely updating names from scratch
+        asyncio.create_task(self.get_names())
+
+        # Repeats on disconnect
         while not self.end:
             # Try to connect
             try:
                 await self.connect()
-            except Exception as connection_exception:
+            except ACCEPTABLE_EXCEPTIONS as connection_exception:
                 print("Failed to connect,", connection_exception)
+
             # Sub event loop while connected
             if self.writer and self.reader:  # Not none
                 while not self.writer.is_closing() and not self.reader.at_eof():
                     try:
                         data = await self.reader.readline()
-                        if data is not None:
-                            asyncio.create_task(self.safe_respond(data))
-                    except Exception:
-                        try:
-                            await self.send("QUIT goo by cwuel wowl,,")
-                        except Exception as quit_exception:
-                            print("Failed to send QUIT,", quit_exception)
+                        if data:
+                            text = data.decode()
+                            text_split = text.split(" ")
+                            if text.startswith(":"):
+                                command = text_split[1].upper()
+                            else:
+                                command = text_split[0].upper()
+                            # Pass task to the command's associated function if it exists.
+                            if command in command_handlers:
+                                asyncio.create_task(command_handlers[command](text))
+                    except ACCEPTABLE_EXCEPTIONS as core_exception:
+                        print("Error,", core_exception)
+                        # Write to logfile
+                        local_time = time.localtime()
+                        local_time_str = time.strftime("%Y-%m-%d %H-%M", local_time)
+                        with open(
+                            f"errorlogs/RE_errorlog {local_time_str}.log",
+                            "a",
+                            encoding="utf-8",
+                        ) as file:
+                            traceback.print_tb(core_exception.__traceback__, file=file)
                         self.writer.close()
+                    except KeyboardInterrupt:
+                        await self.send("QUIT goo by cwuel wowl,,")
+                        self.end = True
             if not self.end:
                 print("4.13 seconds until reconnect. . .")
                 await asyncio.sleep(4.13)
