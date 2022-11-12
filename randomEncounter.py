@@ -186,7 +186,7 @@ class RandomEncounterBot:
         # Add to userlist
         for name in names_list:
             # Strip channel operator symbols
-            if (name[0] == "@") or (name[0] == "+"):
+            if name[0] in PREFIXES:
                 self.names.append(name[1:])
             else:
                 self.names.append(name)
