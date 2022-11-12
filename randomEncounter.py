@@ -115,7 +115,7 @@ class RandomEncounterBot:
             text += " " + param
         print("Send: " + text)
         await self.writer.drain()
-        self.writer.write((text + "\n").encode())
+        self.writer.write((text + "\r\n").encode())
 
     async def get_config(self):
         """Gets bot configuration from 'config.ini'"""
@@ -179,7 +179,6 @@ class RandomEncounterBot:
 
     async def nam_reply(self, text):
         """RPL_NAMREPLY, add NAMES reply to userlist"""
-        text = text.strip()
         # List of names start
         names_str = text.split(":")[2]
         # after second delimiter
@@ -201,7 +200,6 @@ class RandomEncounterBot:
 
     async def privmsg(self, text):
         """Handles incoming PRIVMSG"""
-        text = text.strip()
         parameters = text.split(" ")[2:15]
         receiver = parameters[0]
         prefix = text[1:].split(" ")[0]
@@ -242,7 +240,6 @@ class RandomEncounterBot:
 
     async def notice(self, text):
         """Handles incoming NOTICE"""
-        text = text.strip()
         parameters = text.split(" ")[2:15]
         receiver = parameters[0]
         prefix = text[1:].split(" ")[0]
@@ -281,12 +278,11 @@ class RandomEncounterBot:
 
     async def ping(self, text):
         """Handle incoming pings"""
-        self.writer.write(text.replace("PING", "PONG").encode())
+        await self.send("PONG" + text[4:])
 
     async def nick(self, text):
         """Handle users changing their nicks,
         nick got changed from old_nick to new_nick"""
-        text = text.strip()
         prefix = text[1:].split(" ")[0]
         old_nick = prefix[: prefix.find("!")]
         parameters = text.split(" ")[2:15]
@@ -301,21 +297,18 @@ class RandomEncounterBot:
 
     async def quit(self, text):
         """Handle other user's QUITs"""
-        text = text.strip()
         prefix = text[1:].split(" ")[0]
         nick = prefix[: prefix.find("!")]
         await self.users.remove(nick)
 
     async def part(self, text):
         """Handle other user's PARTs"""
-        text = text.strip()
         prefix = text[1:].split(" ")[0]
         nick = prefix[: prefix.find("!")]
         await self.users.remove(nick)
 
     async def join(self, text):
         """Handle other user's JOINs"""
-        text = text.strip()
         prefix = text[1:].split(" ")[0]
         nick = prefix[: prefix.find("!")]
         if nick[0] == ":":
@@ -371,7 +364,7 @@ class RandomEncounterBot:
                                 command = text_split[0].upper()
                             # Pass task to the command's associated function if it exists.
                             if command in command_handlers:
-                                asyncio.create_task(command_handlers[command](text))
+                                asyncio.create_task(command_handlers[command](text.strip()))
                     except ACCEPTABLE_EXCEPTIONS as core_exception:
                         print("Error,", core_exception)
                         # Write to logfile
