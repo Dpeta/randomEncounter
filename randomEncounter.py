@@ -83,7 +83,10 @@ class Users:
                 encounter.remove(user)
         print(f"dont_encounter: {dont_encounter}")
         print(f"encounter: {encounter}")
-        return random.choice(encounter)
+        if encounter:
+            return random.choice(encounter)
+        else:
+            return "mistakesWeremade"
 
     async def sanity_check(self):
         """Make sure that users not in the userlist aren't
@@ -107,7 +110,6 @@ class RandomEncounterBot:
         self.reader = None
         self.writer = None
         self.users = Users()
-        self.names = []  # For updating userlist via NAMES
 
     async def send(self, text, *params):
         """Works with command as str or as multiple seperate params"""
@@ -187,16 +189,9 @@ class RandomEncounterBot:
         for name in names_list:
             # Strip channel operator symbols
             if name[0] in PREFIXES:
-                self.names.append(name[1:])
+                await self.users.add(name[1:])
             else:
-                self.names.append(name)
-
-    async def end_of_names(self, _):
-        """RPL_ENDOFNAMES, NAMES finished"""
-        print(f"{self.users.userlist} replaced with {self.names}")
-        self.users.userlist = self.names
-        self.names = []
-        await self.users.sanity_check()
+                await self.users.add(name)
 
     async def privmsg(self, text):
         """Handles incoming PRIVMSG"""
@@ -318,19 +313,24 @@ class RandomEncounterBot:
     async def get_names(self):
         """Routinely retrieve the userlist from scratch."""
         while True:
-            await asyncio.sleep(1800)  # 30min
-            print("Routine NAMES send.")
+            await asyncio.sleep(1200)  # 20min
+            print("Routine NAMES reset.")
+            self.users.userlist = []
             try:
                 await self.send("NAMES #pesterchum")
             except AttributeError as fail_names:
                 print(f"Failed to send NAMES, disconnected? {fail_names}")
+
+            # Run sanity check with a delay
+            await asyncio.sleep(600) # 10min
+            self.users.sanity_check()
 
     async def main(self):
         """Main function/loop, creates a new task when the server sends data."""
         command_handlers = {
             "001": self.welcome,
             "353": self.nam_reply,
-            "366": self.end_of_names,
+            #"366": self.end_of_names,
             "PING": self.ping,
             "PRIVMSG": self.privmsg,
             "NOTICE": self.notice,
