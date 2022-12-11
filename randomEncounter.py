@@ -372,8 +372,8 @@ class RandomEncounterBot:
                     try:
                         data = await self.reader.readline()
                         if data:
-                            text = self.decode_data(data)
-                            command = self.get_command(text)
+                            text = await self.decode_data(data)
+                            command = await self.get_command(text)
                             # Pass task to the command's associated function if it exists.
                             if command in command_handlers:
                                 asyncio.create_task(
