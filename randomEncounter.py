@@ -85,8 +85,7 @@ class Users:
         print(f"encounter: {encounter}")
         if encounter:
             return random.choice(encounter)
-        else:
-            return "mistakesWeremade"
+        return "mistakeswereMade"
 
     async def sanity_check(self):
         """Make sure that users not in the userlist aren't
@@ -322,15 +321,32 @@ class RandomEncounterBot:
                 print(f"Failed to send NAMES, disconnected? {fail_names}")
 
             # Run sanity check with a delay
-            await asyncio.sleep(600) # 10min
+            await asyncio.sleep(600)  # 10min
             self.users.sanity_check()
+
+    async def decode_data(self, data):
+        """Returns decoded string, returns one space if it fails."""
+        try:
+            return data.decode()
+        except ValueError:
+            return " "
+
+    async def get_command(self, text):
+        """Return IRC command from line of text, returns empty string if it fails."""
+        text_split = text.split(" ")
+        length = len(text_split)
+        if text.startswith(":") and length >= 1:
+            return text_split[1].upper()
+        if length >= 0:
+            return text_split[0].upper()
+        return ""
 
     async def main(self):
         """Main function/loop, creates a new task when the server sends data."""
         command_handlers = {
             "001": self.welcome,
             "353": self.nam_reply,
-            #"366": self.end_of_names,
+            # "366": self.end_of_names,
             "PING": self.ping,
             "PRIVMSG": self.privmsg,
             "NOTICE": self.notice,
@@ -356,15 +372,13 @@ class RandomEncounterBot:
                     try:
                         data = await self.reader.readline()
                         if data:
-                            text = data.decode()
-                            text_split = text.split(" ")
-                            if text.startswith(":"):
-                                command = text_split[1].upper()
-                            else:
-                                command = text_split[0].upper()
+                            text = self.decode_data(data)
+                            command = self.get_command(text)
                             # Pass task to the command's associated function if it exists.
                             if command in command_handlers:
-                                asyncio.create_task(command_handlers[command](text.strip()))
+                                asyncio.create_task(
+                                    command_handlers[command](text.strip())
+                                )
                     except ACCEPTABLE_EXCEPTIONS as core_exception:
                         print("Error,", core_exception)
                         # Write to logfile
