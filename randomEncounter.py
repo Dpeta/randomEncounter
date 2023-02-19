@@ -34,7 +34,7 @@ class Users:
                 user = user[1:]
             if user not in self.userlist:
                 self.userlist.append(user)
-        print(f"self.userlist: {self.userlist}")
+        print(f"Amount of users is {len(self.userlist)}.")
 
     async def remove(self, *users):
         """Adds users if they quit/parted or someone changed their nick to a new handle"""
@@ -43,7 +43,7 @@ class Users:
                 user = user[1:]
             if user in self.userlist:
                 self.userlist.remove(user)
-        print(f"self.userlist: {self.userlist}")
+        print(f"Amount of users is {len(self.userlist)}.")
 
     async def set_idle(self, user, idle):
         """Set if a user is or is not idle,
@@ -51,12 +51,14 @@ class Users:
         if idle:
             if user not in self.idle:
                 # Add idle user
+                print(f"{user} is now idle.")
                 self.idle.append(user)
         else:
             if user in self.idle:
                 # Remove idle user
+                print(f"{user} is no longer idle.")
                 self.idle.remove(user)
-        print(f"self.idle: {self.idle}")
+        print(f"There are currently {len(self.idle)} users idle!! :3")
 
     async def set_random_encounter(self, user, encounter):
         """Set if a user has random encounters enabled,
@@ -69,7 +71,7 @@ class Users:
             if user not in self.exclude:
                 # Add user to exclude list
                 self.exclude.append(user)
-        print(f"self.exclude: {self.exclude}")
+        # print(f"self.exclude: {self.exclude}")
 
     async def get_random(self):
         """Return a random user from the userlist,
@@ -81,8 +83,10 @@ class Users:
         for user in dont_encounter:
             if user in encounter:
                 encounter.remove(user)
-        print(f"dont_encounter: {dont_encounter}")
-        print(f"encounter: {encounter}")
+        print("Random Encounter request received!!")
+        print(f"Total amount of users: {len(self.userlist)}")
+        print(f"Users that should not be encountered: {len(dont_encounter)}")
+        print(f"Encounterable users: {len(encounter)}.")
         if encounter:
             return random.choice(encounter)
         return "mistakeswereMade"
@@ -157,15 +161,22 @@ class RandomEncounterBot:
                 config["server"].getint("port"),
                 ssl=config["server"].getboolean("ssl"),
             )
+        # Request away-notify cap
+        await self.send("CAP REQ away-notify")
+        # Do normal IRC handshake
         await self.send("NICK randomEncounter")
         await self.send("USER RE 0 * :PCRC")
+        # End capability negotation
+        await self.send("CAP END")
 
     async def welcome(self, _):
         """Actions to take when the server has send a welcome/001 reply,
         meaning the client is connected and nick/user registration is completed."""
+        print("Welcome received, connected!!")
         config = await self.get_config()
         await self.send("MODE randomEncounter +B")
         await self.send("JOIN #pesterchum")
+        await self.send("WHO #pesterchum")
         await self.send(
             "VHOST", config["tokens"]["vhost_login"], config["tokens"]["vhost_password"]
         )
@@ -309,6 +320,30 @@ class RandomEncounterBot:
             nick = nick[1:]
         await self.users.add(nick)
 
+    async def away(self, text):
+        """Handle ircv3 away."""
+        text = text[1:]
+        params = text.split(" ")
+        prefix = params[0]
+        nick = prefix[: prefix.find("!")]
+        if len(params) >= 3:
+            # The :message param is present, the user is afk.
+            await self.users.set_idle(nick, True)
+        else:
+            # No message, the user stopped being idle.
+            await self.users.set_idle(nick, False)
+
+    async def whoreply(self, text):
+        """WHO command response, we only use it to check for idle users."""
+        params = text.split(" ")
+        nick = params[7]
+        if "H" in params[8]:
+            # User is present
+            await self.users.set_idle(nick, False)
+        elif "G" in params[8]:
+            # User is away
+            await self.users.set_idle(nick, True)
+
     async def get_names(self):
         """Routinely retrieve the userlist from scratch."""
         while True:
@@ -336,15 +371,16 @@ class RandomEncounterBot:
         text_split = text.split(" ")
         length = len(text_split)
         if text.startswith(":") and length >= 1:
-            return text_split[1].upper()
+            return text_split[1].upper().strip()
         if length >= 0:
-            return text_split[0].upper()
+            return text_split[0].upper().strip()
         return ""
 
     async def main(self):
         """Main function/loop, creates a new task when the server sends data."""
         command_handlers = {
             "001": self.welcome,
+            "352": self.whoreply,
             "353": self.nam_reply,
             # "366": self.end_of_names,
             "PING": self.ping,
@@ -354,6 +390,7 @@ class RandomEncounterBot:
             "QUIT": self.quit,
             "PART": self.part,
             "JOIN": self.join,
+            "AWAY": self.away,
         }
         # Create task for routinely updating names from scratch
         asyncio.create_task(self.get_names())
